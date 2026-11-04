@@ -1682,25 +1682,40 @@ const Galaxy = (() => {
     return { v: 2, w: cut(firma.name, 40), t: String(firma.telefon || "").trim(), k: cut(j.kunde, 40), a: cut(j.auto, 40), z: String(j.kennzeichen || "").trim(), s: j.status || "neu", ar, tp, f: j.fertigBis || "", o: Math.round(openSum(j) * 100) / 100, u: Math.round(Date.now() / 60000) };
   }
   const b64u = (bytes) => { let bin = ""; bytes.forEach((b) => (bin += String.fromCharCode(b))); return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); };
-  // kurzer Link: Angaben gepackt (deflate) und nur aus Buchstaben, Ziffern, - und _ (WhatsApp erkennt ihn so komplett als Link)
-  const slCache = {};
-  async function statusLinkAsync(j) {
-    const base = String(firma.statusUrl || "").trim();
-    if (!/^https?:\/\//i.test(base)) return "";
-    const raw = new TextEncoder().encode(JSON.stringify(statusData(j)));
-    let code = "j" + b64u(raw);
-    try {
-      if (typeof CompressionStream === "function") {
-        const zs = new Blob([raw]).stream().pipeThrough(new CompressionStream("deflate-raw"));
-        const z = new Uint8Array(await new Response(zs).arrayBuffer());
-        code = "z" + b64u(z);
-      }
-    } catch {}
-    const link = base.split("#")[0] + "#" + code;
-    slCache[j.id] = link;
-    return link;
+  const unb64u = (t) => { t = t.replace(/-/g, "+").replace(/_/g, "/"); while (t.length % 4) t += "="; const bin = atob(t), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; };
+  // Fester Kunden-Link: …/status.html#<id>.<schlüssel>. Der Stand liegt verschlüsselt bei GitHub,
+  // lesen kann ihn nur, wer den Schlüssel aus dem Link hat.
+  const STATUS_TRIGGER = "trig_01S9cSrGPegVWHaq5J5FAFes";
+  function ensureStatusIds(j) {
+    if (j.sid && j.skey) return false;
+    const a = "abcdefghijkmnpqrstuvwxyz23456789", r = crypto.getRandomValues(new Uint8Array(10));
+    j.sid = Array.from(r, (x) => a[x % a.length]).join("");
+    j.skey = b64u(crypto.getRandomValues(new Uint8Array(16)));
+    return true;
   }
-  const statusLink = (j) => slCache[j.id] || "";
+  function statusLink(j) {
+    const base = String(firma.statusUrl || "").trim();
+    if (window.__STANDALONE || !/^https?:\/\//i.test(base)) return "";
+    if (ensureStatusIds(j)) save(j);
+    return base.split("#")[0] + "#" + j.sid + "." + j.skey;
+  }
+  const statusLinkAsync = async (j) => statusLink(j);
+  let stFireT = null;
+  async function publishStatus(j) {
+    if (!statusLink(j) || !db || !crypto.subtle) return false;
+    try {
+      const key = await crypto.subtle.importKey("raw", unb64u(j.skey), "AES-GCM", false, ["encrypt"]);
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(JSON.stringify(statusData(j)))));
+      await db.collection("statuspub").doc(j.sid).set({ iv: b64u(iv), ct: b64u(ct), u: Date.now() });
+      // mehrere Änderungen kurz hintereinander = ein Upload
+      clearTimeout(stFireT);
+      stFireT = setTimeout(async () => {
+        try { if (mcpNs) await mcpNs.callTool(BOT_SERVER, "fire_trigger", { trigger_id: STATUS_TRIGGER, text: "Gestartet von der Werkstatt-App nach Statuswechsel." }, { cache: false }); } catch (e) { console.warn("Status-Upload nicht gestartet", e); }
+      }, 15000);
+      return true;
+    } catch (e) { console.warn(e); return false; }
+  }
   const statusMsg = (j, link) => `Hallo${String(j.kunde || "").trim() ? " " + String(j.kunde).trim() : ""}, hier sehen Sie den aktuellen Stand Ihres ${String(j.auto || "Autos").trim()}:\n\n${link}` + (String(firma.name || "").trim() ? `\n\nViele Grüße\n${String(firma.name).trim()}` : "");
   function waLink(tel, text) {
     let n = String(tel || "").replace(/[^\d+]/g, "");
@@ -2444,11 +2459,18 @@ Lass Felder leer, die du nicht sicher lesen kannst.`, { images: [f] });
     const nudge = el("div", "snudge"); nudge.hidden = true;
     async function drawNudge(show) {
       nudge.innerHTML = ""; nudge.hidden = true;
-      if (!show || !j.telefon) return;
-      const link = await statusLinkAsync(j); if (!link) return;
+      if (!show) return;
+      const link = statusLink(j); if (!link) return;
+      const ok = await publishStatus(j);
+      if (j.slSent) {
+        if (!ok) return;
+        nudge.append(el("span", "hint", "✓ Dein Kunde sieht den neuen Stand in ein paar Minuten über seinen Link.")); nudge.hidden = false;
+        setTimeout(() => (nudge.hidden = true), 6000); return;
+      }
+      if (!j.telefon) return;
       const href = waLink(j.telefon, statusMsg(j, link)); if (!href) return;
-      const a = document.createElement("a"); a.className = "copy wa"; a.href = href; a.target = "_blank"; a.rel = "noopener"; a.textContent = "📍 Kunde den neuen Stand schicken";
-      a.onclick = () => setTimeout(() => (nudge.hidden = true), 300);
+      const a = document.createElement("a"); a.className = "copy wa"; a.href = href; a.target = "_blank"; a.rel = "noopener"; a.textContent = "📍 Kunde den Status-Link schicken";
+      a.onclick = () => { j.slSent = true; save(j); setTimeout(() => (nudge.hidden = true), 300); };
       const x = el("button", "x", "✕"); x.setAttribute("aria-label", "Ausblenden"); x.onclick = () => (nudge.hidden = true);
       nudge.append(a, x); nudge.hidden = false;
     }
@@ -3143,11 +3165,11 @@ ${JSON.stringify(facts, null, 1)}`, { onText: ({ text }) => { ms.textContent = "
       if (!link) { sl.append(el("p", "hint", "Noch keine Status-Seite eingerichtet: Mehr → Deine Daten für Rechnungen → „Adresse deiner Status-Seite“.")); return; }
       const row = el("div", "row");
       const href = waLink(j.telefon, statusMsg(j, link));
-      if (href) { const a = document.createElement("a"); a.className = "btn"; a.href = href; a.target = "_blank"; a.rel = "noopener"; a.textContent = "📍 Per WhatsApp schicken"; row.append(a); }
-      const cp = el("button", "copy", "Link kopieren"); cp.onclick = () => copy(statusLink(j), cp, sl);
+      if (href) { const a = document.createElement("a"); a.className = "btn"; a.href = href; a.target = "_blank"; a.rel = "noopener"; a.textContent = j.slSent ? "📍 Link nochmal schicken" : "📍 Per WhatsApp schicken"; a.onclick = () => { if (!j.slSent) { j.slSent = true; save(j); } publishStatus(j); }; row.append(a); }
+      const cp = el("button", "copy", "Link kopieren"); cp.onclick = () => { copy(statusLink(j), cp, sl); publishStatus(j); };
       const op = document.createElement("a"); op.className = "copy"; op.href = link; op.target = "_blank"; op.rel = "noopener"; op.textContent = "Ansehen";
 
-      row.append(cp, op); sl.append(row, el("p", "hint", "Der Kunde sieht Status, Arbeiten, Fertig-Termin und bei Abholung den Betrag – nur von seinem Auto. Ändert sich etwas, schick einfach einen neuen Link."));
+      row.append(cp, op); sl.append(row, el("p", "hint", "Den Link schickst du nur einmal. Wechselst du oben den Status, sieht der Kunde den neuen Stand nach ein paar Minuten von selbst. Er sieht nur sein eigenes Auto."));
     }
     drawSl(); c7.append(sl);
     S7.det.addEventListener("toggle", () => { if (S7.det.open) drawSl(); });
