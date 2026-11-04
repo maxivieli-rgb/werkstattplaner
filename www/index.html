@@ -1704,10 +1704,15 @@ const Galaxy = (() => {
   async function publishStatus(j) {
     if (!statusLink(j) || !db || !crypto.subtle) return false;
     try {
+      if (j.status === "erledigt") {
+        // abgeholt: Stand löschen, Kunde sieht nur noch "abgeschlossen"
+        await db.collection("statuspub").doc(j.sid).set({ gone: true, u: Date.now() });
+      } else {
       const key = await crypto.subtle.importKey("raw", unb64u(j.skey), "AES-GCM", false, ["encrypt"]);
       const iv = crypto.getRandomValues(new Uint8Array(12));
       const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(JSON.stringify(statusData(j)))));
       await db.collection("statuspub").doc(j.sid).set({ iv: b64u(iv), ct: b64u(ct), u: Date.now() });
+      }
       // mehrere Änderungen kurz hintereinander = ein Upload
       clearTimeout(stFireT);
       stFireT = setTimeout(async () => {
@@ -3169,7 +3174,7 @@ ${JSON.stringify(facts, null, 1)}`, { onText: ({ text }) => { ms.textContent = "
       const cp = el("button", "copy", "Link kopieren"); cp.onclick = () => { copy(statusLink(j), cp, sl); publishStatus(j); };
       const op = document.createElement("a"); op.className = "copy"; op.href = link; op.target = "_blank"; op.rel = "noopener"; op.textContent = "Ansehen";
 
-      row.append(cp, op); sl.append(row, el("p", "hint", "Den Link schickst du nur einmal. Wechselst du oben den Status, sieht der Kunde den neuen Stand nach ein paar Minuten von selbst. Er sieht nur sein eigenes Auto."));
+      row.append(cp, op); sl.append(row, el("p", "hint", "Den Link schickst du nur einmal. Wechselst du oben den Status, sieht der Kunde den neuen Stand nach ein paar Minuten von selbst. Er sieht nur sein eigenes Auto. Bei „Abgeholt“ wird der Stand gelöscht."));
     }
     drawSl(); c7.append(sl);
     S7.det.addEventListener("toggle", () => { if (S7.det.open) drawSl(); });

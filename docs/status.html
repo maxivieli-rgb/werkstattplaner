@@ -114,6 +114,7 @@ h2 { margin: 0; font-size: .74rem; letter-spacing: .09em; text-transform: upperc
     if (r.status === 404) return { pending: true };
     if (!r.ok) throw new Error("http " + r.status);
     const j = await r.json();
+    if (j.gone) return { gone: true };
     const key = await crypto.subtle.importKey("raw", unb64(k), "AES-GCM", false, ["decrypt"]);
     const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(j.iv) }, key, unb64(j.ct));
     return JSON.parse(new TextDecoder().decode(pt));
@@ -122,7 +123,7 @@ h2 { margin: 0; font-size: .74rem; letter-spacing: .09em; text-transform: upperc
     const h = location.hash.replace(/^#/, "");
     live = /^([a-z0-9]{8,12})\.([A-Za-z0-9_-]{20,})$/.exec(h);
     if (live) {
-      try { const d = await loadLive(); if (d && d.pending) return d; if (d && d.v === 2 && d.u) d.u = d.u * 60000; if (d && Array.isArray(d.ar)) d.ar = d.ar.map(([t, ok]) => [t, !!ok]); if (d) d.live = true; return d; }
+      try { const d = await loadLive(); if (d && (d.pending || d.gone)) return d; if (d && d.v === 2 && d.u) d.u = d.u * 60000; if (d && Array.isArray(d.ar)) d.ar = d.ar.map(([t, ok]) => [t, !!ok]); if (d) d.live = true; return d; }
       catch { return { error: true }; }
     }
     try {
@@ -157,6 +158,7 @@ h2 { margin: 0; font-size: .74rem; letter-spacing: .09em; text-transform: upperc
     const app = document.getElementById("app"), dock = document.getElementById("dock");
     if (d && d.w) { document.getElementById("shop").textContent = d.w; document.title = "Reparatur-Status · " + d.w; }
     const box = (t) => { app.innerHTML = `<div class="empty">${t}</div>`; dock.innerHTML = ""; };
+    if (d && d.gone) { document.getElementById("shop").textContent = "Ihre Werkstatt"; return box("<b>Dieser Auftrag ist abgeschlossen.</b><br>Vielen Dank für Ihr Vertrauen – gute Fahrt!"); }
     if (d && d.pending) return box("Ihr Reparatur-Status wird gerade vorbereitet.<br>Die Seite lädt sich in einer Minute von selbst neu.");
     if (d && d.error) return box("Der Status konnte gerade nicht geladen werden.<br>Die Seite versucht es gleich nochmal.");
     if (!d) return box("Dieser Status-Link ist unvollständig.<br>Bitte fragen Sie Ihre Werkstatt nach einem neuen Link.");
