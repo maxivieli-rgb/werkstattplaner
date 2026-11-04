@@ -578,8 +578,6 @@ body.light nav.bar button[aria-selected="true"] svg { color: var(--star); filter
 /* Tab-Leiste oben unter dem Titel */
 .app > main > .wrap { padding-bottom: 24px; }
 .app > header .wrap { gap: 10px; }
-.app > header #wsFab { position: static; width: auto; height: 34px; padding: 0 14px; border-radius: 17px; font: 700 .9rem/1 var(--body); box-shadow: 0 4px 12px rgba(255, 106, 26, .35); flex: none; }
-.app > header #wsFab[hidden] { display: none; }
 .app > header .pulse { margin-left: auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .app > header .backhome { white-space: nowrap; flex: none; }
 .app > header .brand { min-width: 0; }
@@ -1610,10 +1608,15 @@ const Galaxy = (() => {
   }
   // Leiste und "+ Neu" sitzen oben: die Claude-App schiebt die Seite manchmal nach unten,
   // dann wäre alles am unteren Rand nicht mehr zu sehen
-  (() => { const f = $("wsFab"), w = document.querySelector(".app > header .wrap"); if (f && w) { f.textContent = "+ Neu"; w.append(f); } })();
   function updFab() {
     const f = $("wsFab");
     f.hidden = !((mode === "ws" || mode === "kunden") && !cur);
+    if (f.hidden) return;
+    // Leiste unten (Store-App): 18px darüber. Leiste oben (claude.ai): fester Abstand, der auch sichtbar bleibt,
+    // wenn die Claude-Leiste die Seite etwas nach unten schiebt.
+    const bar = document.querySelector(".app > .dock nav.bar"), main = document.querySelector(".app > main");
+    const bt = bar ? bar.getBoundingClientRect().top : 0, mt = main ? main.getBoundingClientRect().top : 0;
+    f.style.bottom = bar && bt > mt ? Math.round(window.innerHeight - bt + 18) + "px" : "";
   }
   addEventListener("resize", () => updFab());
   document.querySelectorAll("nav.bar button").forEach((b) => (b.onclick = () => {
@@ -1981,7 +1984,7 @@ const Galaxy = (() => {
     $("wsEmpty").hidden = !(loaded && list.length === 0);
     $("wsEmpty").textContent = jobs.length
       ? "In dieser Ansicht ist gerade kein Auftrag."
-      : "Noch keine Aufträge. Tippe oben rechts auf „+ Neu“ und trag dein erstes Kundenauto ein.";
+      : "Noch keine Aufträge. Tippe unten rechts auf das orange + und trag dein erstes Kundenauto ein.";
     GROUPS.forEach(([st, label]) => {
       const items = list.filter((j) => (j.status || "neu") === st);
       if (!items.length) return;
