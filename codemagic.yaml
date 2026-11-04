@@ -1,0 +1,64 @@
+# Baut die iPhone-App in der Cloud (ohne Mac) und lädt sie zu App Store Connect / TestFlight hoch.
+# Vorher in Codemagic einrichten (siehe ANLEITUNG.md):
+#   1. Teams → Integrations → "Developer Portal" mit App-Store-Connect-API-Schlüssel, Name: werkstatt_asc
+#   2. App → Environment variables: Gruppe "appstore" mit APP_STORE_APPLE_ID (Zahlen-ID der App aus App Store Connect)
+workflows:
+  ios-release:
+    name: Werkstattplaner iOS
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      app_store_connect: werkstatt_asc
+    environment:
+      node: 20
+      xcode: latest
+      cocoapods: default
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: de.werkstattplaner.meister
+      groups:
+        - appstore   # enthält APP_STORE_APPLE_ID
+      vars:
+        BUNDLE_ID: de.werkstattplaner.meister
+    scripts:
+      - name: Pakete installieren
+        script: npm install
+      - name: iOS-Projekt erzeugen, Symbol und Startbild
+        script: |
+          npx cap add ios
+          npx capacitor-assets generate --ios --iconBackgroundColor '#141518' --splashBackgroundColor '#141518' --splashBackgroundColorDark '#141518'
+          npx cap sync ios
+      - name: Info.plist ergänzen (Texte für Fotos, keine Verschlüsselung)
+        script: |
+          PL=ios/App/App/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Werkstattplaner" $PL || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string Werkstattplaner" $PL
+          /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" $PL || true
+          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'Die Kamera wird genutzt, um Fotos von Autos, Teilen und Belegen zu einem Auftrag zu speichern.'" $PL || true
+          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryUsageDescription string 'Fotos werden genutzt, um Bilder von Autos, Teilen und Belegen zu einem Auftrag zu speichern.'" $PL || true
+          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryAddUsageDescription string 'Damit du PDFs und Bilder aus der App speichern kannst.'" $PL || true
+          /usr/libexec/PlistBuddy -c "Add :UIRequiresFullScreen bool true" $PL || true
+          /usr/libexec/PlistBuddy -c "Delete :UISupportedInterfaceOrientations" $PL || true
+          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations array" $PL
+          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations:0 string UIInterfaceOrientationPortrait" $PL
+      - name: Signatur einrichten
+        # Zertifikat und Profil holt Codemagic automatisch über ios_signing + Integration
+        script: xcode-project use-profiles
+      - name: Versionsnummer hochzählen
+        script: |
+          cd ios/App
+          LATEST=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID" || echo 0)
+          agvtool new-version -all $((LATEST + 1))
+          agvtool new-marketing-version 1.0.0
+      - name: App bauen
+        script: |
+          if [ -d ios/App/App.xcworkspace ]; then
+            xcode-project build-ipa --workspace ios/App/App.xcworkspace --scheme App
+          else
+            xcode-project build-ipa --project ios/App/App.xcodeproj --scheme App
+          fi
+    artifacts:
+      - build/ios/ipa/*.ipa
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true

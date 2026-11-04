@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Reparatur-Status</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600&family=Manrope:wght@400;600;700&display=swap">
+<style>
+/* Layout: one narrow column like a repair ticket – car plate on top, a vertical progress track, then the work list and contact. */
+:root {
+  --bg: #f3f2ef; --card: #ffffff; --fg: #18191c; --muted: #6b6e76; --line: #e2e1dd;
+  --accent: #f0600f; --accent-soft: #ffe8da; --good: #1f9d55; --good-soft: #dcf3e5;
+  --display: "Unbounded", "Arial Black", system-ui, sans-serif;
+  --body: "Manrope", -apple-system, system-ui, "Segoe UI", sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #121316; --card: #1c1d22; --fg: #f1f1f3; --muted: #9a9da6; --line: #2c2e34; --accent: #ff7a2e; --accent-soft: #3a2316; --good: #43c97b; --good-soft: #15301f; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #121316; --card: #1c1d22; --fg: #f1f1f3; --muted: #9a9da6; --line: #2c2e34; --accent: #ff7a2e; --accent-soft: #3a2316; --good: #43c97b; --good-soft: #15301f; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--fg); font: 16px/1.5 var(--body); -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 520px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: calc(20px + env(safe-area-inset-top, 0px)) calc(32px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 14px; }
+.shop { font-size: .82rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+h1 { font: 600 1.45rem/1.2 var(--display); margin: 0; text-wrap: balance; }
+.car { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; color: var(--muted); font-weight: 600; }
+.plate { display: inline-flex; align-items: stretch; border: 2px solid #1b1b1b; border-radius: 6px; background: #fff; color: #111; font: 700 1rem/1 "DIN Alternate", "Arial Narrow", Arial, sans-serif; letter-spacing: .06em; overflow: hidden; }
+.plate i { background: #1446b8; color: #ffd400; font: 700 .55rem/1 Arial, sans-serif; font-style: normal; display: flex; align-items: flex-end; justify-content: center; padding: 3px 4px; width: 18px; }
+.plate b { padding: 5px 8px; }
+.now { display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 14px; background: var(--accent-soft); }
+.now.done { background: var(--good-soft); }
+.dot { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); flex: none; box-shadow: 0 0 0 0 var(--accent); animation: ping 1.8s ease-out infinite; }
+.now.done .dot { background: var(--good); animation: none; }
+@keyframes ping { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); } 100% { box-shadow: 0 0 0 12px transparent; } }
+.now b { font-size: 1.1rem; display: block; }
+.now span { color: var(--muted); font-size: .9rem; }
+.track { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.track li { display: grid; grid-template-columns: 26px 1fr; gap: 10px; min-height: 44px; position: relative; }
+.track li::before { content: ""; position: absolute; left: 12px; top: 22px; bottom: -2px; width: 2px; background: var(--line); }
+.track li:last-child::before { display: none; }
+.track li.ok::before { background: var(--good); }
+.mk { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--line); background: var(--card); display: grid; place-items: center; font-size: .8rem; font-weight: 700; color: #fff; position: relative; z-index: 1; }
+.ok .mk { background: var(--good); border-color: var(--good); }
+.cur .mk { border-color: var(--accent); background: var(--accent); }
+.track .t { padding-top: 2px; }
+.track .t b { display: block; font-weight: 700; }
+.track .t small { color: var(--muted); }
+.todo .t b { color: var(--muted); font-weight: 600; }
+h2 { margin: 0; font-size: .78rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.jobs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.jobs li { display: flex; gap: 10px; align-items: flex-start; }
+.jobs .c { width: 20px; height: 20px; border-radius: 6px; border: 2px solid var(--line); flex: none; margin-top: 2px; display: grid; place-items: center; font-size: .75rem; color: #fff; }
+.jobs .y .c { background: var(--good); border-color: var(--good); }
+.jobs .n { color: var(--muted); }
+.row { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.row span { color: var(--muted); }
+.row b { font-variant-numeric: tabular-nums; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { flex: 1 1 140px; text-align: center; text-decoration: none; font-weight: 700; padding: 13px 14px; border-radius: 12px; background: var(--accent); color: #fff; }
+.btn.ghost { background: transparent; color: var(--fg); border: 1.5px solid var(--line); }
+.btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.foot { color: var(--muted); font-size: .8rem; text-align: center; }
+.empty { text-align: center; color: var(--muted); padding: 40px 10px; }
+@media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
+</style>
+</head>
+<body>
+<main class="wrap" id="app"><div class="empty">Status wird geladen …</div></main>
+<script>
+(function () {
+  "use strict";
+  const $ = (h) => { const t = document.createElement("template"); t.innerHTML = h.trim(); return t.content.firstChild; };
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const eur = (n) => Number(n).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
+  const dDe = (iso) => { const d = new Date(iso + "T12:00"); return isNaN(d) ? "" : d.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long" }); };
+  function decode() {
+    const m = /[#&]d=([A-Za-z0-9_-]+)/.exec(location.hash);
+    if (!m) return null;
+    try {
+      let b = m[1].replace(/-/g, "+").replace(/_/g, "/"); while (b.length % 4) b += "=";
+      const bin = atob(b), u = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+      return JSON.parse(new TextDecoder().decode(u));
+    } catch { return null; }
+  }
+  const STEPS = [
+    ["neu", "Auto angenommen", "Wir haben Ihr Auto und schauen es uns an."],
+    ["teile", "Teile bestellt", "Wir warten auf die Ersatzteile."],
+    ["arbeit", "In der Werkstatt", "Wir arbeiten gerade an Ihrem Auto."],
+    ["fertig", "Fertig zur Abholung", "Ihr Auto ist fertig und kann abgeholt werden."],
+    ["erledigt", "Abgeholt", "Vielen Dank für Ihren Auftrag!"],
+  ];
+  function render(d) {
+    const app = document.getElementById("app");
+    if (!d) { app.innerHTML = '<div class="empty">Dieser Status-Link ist unvollständig.<br>Bitte frag deine Werkstatt nach einem neuen Link.</div>'; return; }
+    const st = d.s || "neu";
+    // Teile-Schritt nur zeigen, wenn es Teile gibt oder gerade darauf gewartet wird
+    const steps = STEPS.filter(([k]) => k !== "teile" || st === "teile" || d.tp);
+    const order = steps.map((x) => x[0]);
+    let idx = order.indexOf(st); if (idx < 0) idx = 0;
+    const cur = steps[idx];
+    if (d.w) document.title = "Reparatur-Status · " + d.w;
+    const plate = d.z ? `<span class="plate"><i>D</i><b>${esc(d.z)}</b></span>` : "";
+    const ar = Array.isArray(d.ar) ? d.ar : [];
+    const doneN = ar.filter((x) => x[1]).length;
+    const html = [];
+    if (d.w) html.push(`<div class="shop">${esc(d.w)}</div>`);
+    html.push(`<section class="card"><h1>${esc(d.a || "Ihr Auto")}</h1><div class="car">${plate}${d.k ? `<span>${esc(d.k)}</span>` : ""}</div>
+      <div class="now${st === "fertig" || st === "erledigt" ? " done" : ""}"><span class="dot" aria-hidden="true"></span><div><b>${esc(cur[1])}</b><span>${esc(cur[2])}</span></div></div>
+      ${d.f && st !== "fertig" && st !== "erledigt" ? `<div class="row"><span>Voraussichtlich fertig</span><b>${esc(dDe(d.f))}</b></div>` : ""}
+      ${d.tp && st !== "fertig" && st !== "erledigt" ? `<div class="row"><span>Ersatzteile</span><b>${d.tp[0]} von ${d.tp[1]} da</b></div>` : ""}
+    </section>`);
+    html.push(`<section class="card"><h2>Fortschritt</h2><ol class="track">${steps.map((s, i) => `<li class="${i < idx || st === "erledigt" ? "ok" : i === idx ? "cur" : "todo"}"><span class="mk" aria-hidden="true">${i < idx || st === "erledigt" ? "✓" : ""}</span><div class="t"><b>${esc(s[1])}</b>${i === idx ? "<small>aktuell</small>" : ""}</div></li>`).join("")}</ol></section>`);
+    if (ar.length) html.push(`<section class="card"><h2>Arbeiten · ${doneN} von ${ar.length} erledigt</h2><ul class="jobs">${ar.map(([t, ok]) => `<li class="${ok ? "y" : "n"}"><span class="c" aria-hidden="true">${ok ? "✓" : ""}</span><span>${esc(t)}</span></li>`).join("")}</ul></section>`);
+    if (d.o > 0 && (st === "fertig" || st === "erledigt")) html.push(`<section class="card"><div class="row"><span>${st === "fertig" ? "Bei Abholung zu zahlen" : "Noch offen"}</span><b>${eur(d.o)}</b></div></section>`);
+    if (d.t) {
+      const tel = String(d.t).replace(/[^\d+]/g, "");
+      const wa = tel.replace(/^\+/, "").replace(/^00/, "").replace(/^0/, "49");
+      html.push(`<section class="card"><h2>Fragen?</h2><div class="row"><span>Telefon</span><b>${esc(d.t)}</b></div><div class="btns"><a class="btn" href="https://wa.me/${wa}">WhatsApp</a><a class="btn ghost" href="tel:${tel}">Anrufen</a></div></section>`);
+    }
+    if (d.u) { const t = new Date(d.u); html.push(`<div class="foot">Stand: ${t.toLocaleDateString("de-DE")} um ${t.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })} Uhr · Bei Neuigkeiten bekommen Sie einen neuen Link.</div>`); }
+    app.innerHTML = html.join("");
+  }
+  render(decode());
+  addEventListener("hashchange", () => render(decode()));
+})();
+</script>
+</body>
+</html>

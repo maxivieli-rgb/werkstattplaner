@@ -1,0 +1,6 @@
+node_modules/
+ios/
+build/
+*.png.tmp
+sa*.png
+test_sa.js

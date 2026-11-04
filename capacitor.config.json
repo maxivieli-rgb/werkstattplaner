@@ -1,0 +1,15 @@
+{
+  "appId": "de.werkstattplaner.meister",
+  "appName": "Werkstattplaner",
+  "webDir": "www",
+  "backgroundColor": "#141518",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#141518",
+    "scrollEnabled": false
+  },
+  "plugins": {
+    "SplashScreen": { "launchShowDuration": 600, "launchAutoHide": true, "backgroundColor": "#141518", "showSpinner": false },
+    "StatusBar": { "style": "DARK", "overlaysWebView": true }
+  }
+}
