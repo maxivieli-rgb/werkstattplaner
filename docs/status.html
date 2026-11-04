@@ -77,14 +77,20 @@ h2 { margin: 0; font-size: .78rem; letter-spacing: .08em; text-transform: upperc
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const eur = (n) => Number(n).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
   const dDe = (iso) => { const d = new Date(iso + "T12:00"); return isNaN(d) ? "" : d.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long" }); };
-  function decode() {
-    const m = /[#&]d=([A-Za-z0-9_-]+)/.exec(location.hash);
-    if (!m) return null;
+  const unb64 = (b) => { b = b.replace(/-/g, "+").replace(/_/g, "/"); while (b.length % 4) b += "="; const bin = atob(b), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; };
+  async function decode() {
+    const h = location.hash.replace(/^#/, "");
     try {
-      let b = m[1].replace(/-/g, "+").replace(/_/g, "/"); while (b.length % 4) b += "=";
-      const bin = atob(b), u = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
-      return JSON.parse(new TextDecoder().decode(u));
+      let bytes;
+      if (/^z[A-Za-z0-9_-]+$/.test(h)) {
+        const zs = new Blob([unb64(h.slice(1))]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+        bytes = new Uint8Array(await new Response(zs).arrayBuffer());
+      } else if (/^j[A-Za-z0-9_-]+$/.test(h)) bytes = unb64(h.slice(1));
+      else { const m = /(?:^|&)d=([A-Za-z0-9_-]+)/.exec(h); if (!m) return null; bytes = unb64(m[1]); }
+      const d = JSON.parse(new TextDecoder().decode(bytes));
+      if (d && d.v === 2 && d.u) d.u = d.u * 60000;
+      if (d && Array.isArray(d.ar)) d.ar = d.ar.map(([t, ok]) => [t, !!ok]);
+      return d;
     } catch { return null; }
   }
   const STEPS = [
@@ -125,8 +131,8 @@ h2 { margin: 0; font-size: .78rem; letter-spacing: .08em; text-transform: upperc
     if (d.u) { const t = new Date(d.u); html.push(`<div class="foot">Stand: ${t.toLocaleDateString("de-DE")} um ${t.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })} Uhr · Bei Neuigkeiten bekommen Sie einen neuen Link.</div>`); }
     app.innerHTML = html.join("");
   }
-  render(decode());
-  addEventListener("hashchange", () => render(decode()));
+  const go = async () => render(await decode());
+  go(); addEventListener("hashchange", go);
 })();
 </script>
 </body>

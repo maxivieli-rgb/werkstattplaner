@@ -1674,18 +1674,34 @@ const Galaxy = (() => {
   const vehKey = (j) => plateKey(j.kennzeichen) || String(j.fin || "").toUpperCase().trim();
   // WhatsApp link from a German phone number
   // Status-Link für Kunden: alle Angaben stecken im Link selbst (#d=…), nichts liegt auf einem Server
-  function statusLink(j) {
-    const base = String(firma.statusUrl || "").trim();
-    if (!/^https?:\/\//i.test(base)) return "";
-    const ar = (j.arbeiten || []).map((a) => [a.text, !!a.done]);
+  function statusData(j) {
+    const cut = (t, n) => { t = String(t || "").trim(); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
+    const ar = (j.arbeiten || []).slice(0, 15).map((a) => [cut(a.text, 48), a.done ? 1 : 0]);
     const tl = j.teile || [];
     const tp = tl.length ? [tl.filter((p) => p.status === "da" || p.status === "verbaut").length, tl.length] : 0;
-    const d = { v: 1, w: firma.name || "", t: firma.telefon || "", k: j.kunde || "", a: j.auto || "", z: j.kennzeichen || "", s: j.status || "neu", ar, tp, f: j.fertigBis || "", o: Math.round(openSum(j) * 100) / 100, u: Date.now() };
-    const bytes = new TextEncoder().encode(JSON.stringify(d));
-    let bin = ""; bytes.forEach((b) => (bin += String.fromCharCode(b)));
-    return base.split("#")[0] + "#d=" + btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    return { v: 2, w: cut(firma.name, 40), t: String(firma.telefon || "").trim(), k: cut(j.kunde, 40), a: cut(j.auto, 40), z: String(j.kennzeichen || "").trim(), s: j.status || "neu", ar, tp, f: j.fertigBis || "", o: Math.round(openSum(j) * 100) / 100, u: Math.round(Date.now() / 60000) };
   }
-  const statusMsg = (j, link) => `Hallo${j.kunde ? " " + j.kunde : ""}, hier sehen Sie den aktuellen Stand Ihres ${j.auto || "Autos"}: ${link}` + (firma.name ? `\n\nViele Grüße\n${firma.name}` : "");
+  const b64u = (bytes) => { let bin = ""; bytes.forEach((b) => (bin += String.fromCharCode(b))); return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); };
+  // kurzer Link: Angaben gepackt (deflate) und nur aus Buchstaben, Ziffern, - und _ (WhatsApp erkennt ihn so komplett als Link)
+  const slCache = {};
+  async function statusLinkAsync(j) {
+    const base = String(firma.statusUrl || "").trim();
+    if (!/^https?:\/\//i.test(base)) return "";
+    const raw = new TextEncoder().encode(JSON.stringify(statusData(j)));
+    let code = "j" + b64u(raw);
+    try {
+      if (typeof CompressionStream === "function") {
+        const zs = new Blob([raw]).stream().pipeThrough(new CompressionStream("deflate-raw"));
+        const z = new Uint8Array(await new Response(zs).arrayBuffer());
+        code = "z" + b64u(z);
+      }
+    } catch {}
+    const link = base.split("#")[0] + "#" + code;
+    slCache[j.id] = link;
+    return link;
+  }
+  const statusLink = (j) => slCache[j.id] || "";
+  const statusMsg = (j, link) => `Hallo${String(j.kunde || "").trim() ? " " + String(j.kunde).trim() : ""}, hier sehen Sie den aktuellen Stand Ihres ${String(j.auto || "Autos").trim()}:\n\n${link}` + (String(firma.name || "").trim() ? `\n\nViele Grüße\n${String(firma.name).trim()}` : "");
   function waLink(tel, text) {
     let n = String(tel || "").replace(/[^\d+]/g, "");
     if (!n) return "";
@@ -2426,12 +2442,13 @@ Lass Felder leer, die du nicht sicher lesen kannst.`, { images: [f] });
       st.append(b);
     });
     const nudge = el("div", "snudge"); nudge.hidden = true;
-    function drawNudge(show) {
+    async function drawNudge(show) {
       nudge.innerHTML = ""; nudge.hidden = true;
-      const link = statusLink(j); if (!show || !link || !j.telefon) return;
+      if (!show || !j.telefon) return;
+      const link = await statusLinkAsync(j); if (!link) return;
       const href = waLink(j.telefon, statusMsg(j, link)); if (!href) return;
       const a = document.createElement("a"); a.className = "copy wa"; a.href = href; a.target = "_blank"; a.rel = "noopener"; a.textContent = "📍 Kunde den neuen Stand schicken";
-      a.onclick = () => { a.href = waLink(j.telefon, statusMsg(j, statusLink(j))) || a.href; setTimeout(() => (nudge.hidden = true), 300); };
+      a.onclick = () => setTimeout(() => (nudge.hidden = true), 300);
       const x = el("button", "x", "✕"); x.setAttribute("aria-label", "Ausblenden"); x.onclick = () => (nudge.hidden = true);
       nudge.append(a, x); nudge.hidden = false;
     }
@@ -3119,20 +3136,21 @@ ${JSON.stringify(facts, null, 1)}`, { onText: ({ text }) => { ms.textContent = "
     c7.append(anrede, mr, ms, mo, el("p", "hint", "Du kannst den Text vor dem Senden direkt hier ändern."));
     // Status-Link wie bei der Paketverfolgung
     const sl = el("div", "slink");
-    function drawSl() {
+    async function drawSl() {
+      const link = await statusLinkAsync(j);
       sl.innerHTML = "";
       sl.append(el("span", "lbl", "Status-Link für den Kunden"));
-      const link = statusLink(j);
       if (!link) { sl.append(el("p", "hint", "Noch keine Status-Seite eingerichtet: Mehr → Deine Daten für Rechnungen → „Adresse deiner Status-Seite“.")); return; }
       const row = el("div", "row");
       const href = waLink(j.telefon, statusMsg(j, link));
-      if (href) { const a = document.createElement("a"); a.className = "btn"; a.href = href; a.target = "_blank"; a.rel = "noopener"; a.textContent = "📍 Per WhatsApp schicken"; a.onclick = () => { a.href = waLink(j.telefon, statusMsg(j, statusLink(j))) || a.href; }; row.append(a); }
+      if (href) { const a = document.createElement("a"); a.className = "btn"; a.href = href; a.target = "_blank"; a.rel = "noopener"; a.textContent = "📍 Per WhatsApp schicken"; row.append(a); }
       const cp = el("button", "copy", "Link kopieren"); cp.onclick = () => copy(statusLink(j), cp, sl);
       const op = document.createElement("a"); op.className = "copy"; op.href = link; op.target = "_blank"; op.rel = "noopener"; op.textContent = "Ansehen";
-      op.onclick = () => { op.href = statusLink(j); };
+
       row.append(cp, op); sl.append(row, el("p", "hint", "Der Kunde sieht Status, Arbeiten, Fertig-Termin und bei Abholung den Betrag – nur von seinem Auto. Ändert sich etwas, schick einfach einen neuen Link."));
     }
     drawSl(); c7.append(sl);
+    S7.det.addEventListener("toggle", () => { if (S7.det.open) drawSl(); });
 
     // Öl & Drehmoment (technische Daten)
     const ST = section("tech", "Öl & Drehmoment", () => {
