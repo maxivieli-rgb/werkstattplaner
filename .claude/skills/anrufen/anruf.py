@@ -8,7 +8,7 @@ Umgebungsvariablen:
     BLAND_TO_NUMBER   Zielnummer im E.164-Format, z. B. +4917612345678 (Pflicht)
     BLAND_API_KEY     API-Key. In Claude-Code-Cloud-Sessions setzt der Netzwerk-Proxy
                       den echten Key ein; dann reicht der Platzhalter.
-    BLAND_VOICE       Optional: Stimme (Standard: Bland-Default)
+    BLAND_VOICE       Optional: Stimmen-ID (Standard: "Karl", deutsche Stimme)
     BLAND_MAX_WAIT    Optional: maximale Wartezeit in Sekunden (Standard: 600)
 
 Exit-Codes: 0 = Gespräch geführt, 2 = nicht erreicht/abgebrochen, 1 = Fehler.
@@ -70,8 +70,9 @@ def main():
             "der Angerufene gegeben hat. Wenn keine klare Antwort kam, schreibe das."
         ),
     }
-    if os.environ.get("BLAND_VOICE"):
-        body["voice"] = os.environ["BLAND_VOICE"]
+    # Standard: "Karl" (Bland Curated, deutsch, männlich). Getestet und abgelehnt:
+    # Bland-Default (englisch) und "Lauren - Bland" 22504ebd-... (deutsch, weiblich).
+    body["voice"] = os.environ.get("BLAND_VOICE", "a24c43d3-f448-4fea-a498-a9287f7cabf3")
 
     start = request("POST", API, body)
     call_id = start.get("call_id")
