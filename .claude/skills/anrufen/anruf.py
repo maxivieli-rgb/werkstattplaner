@@ -50,6 +50,11 @@ def main():
         "Sprich ausschließlich Deutsch, freundlich und knapp. "
         f"Anliegen: {anliegen}\n"
         "Erkläre das Anliegen in ein bis zwei Sätzen, stelle die Frage und höre die Antwort an. "
+        "WICHTIG: Fragt zuerst eine automatische Anrufprüfung (z. B. iPhone-Anruffilter) "
+        "nach Name und Grund des Anrufs, dann ist das KEINE Mailbox. Antworte darauf genau: "
+        "'Hier ist Claude, der KI-Assistent vom Werkstattplaner, mit einer kurzen Rückfrage.' "
+        "Lege dann NICHT auf, sondern warte still, bis die Person selbst rangeht, und "
+        "beginne erst dann mit dem Anliegen. "
         "Wenn die Antwort unklar ist, frage einmal nach. Wiederhole die Entscheidung zum Schluss "
         "kurz zur Bestätigung, bedanke dich und beende das Gespräch. Erfinde keine Details."
     )
@@ -57,8 +62,8 @@ def main():
         "phone_number": nummer,
         "task": task,
         "language": "de",
-        "first_sentence": "Hallo, hier ist dein Claude-Assistent.",
-        "wait_for_greeting": False,
+        "first_sentence": "Hallo, hier ist Claude, dein KI-Assistent vom Werkstattplaner.",
+        "wait_for_greeting": True,
         "max_duration": 5,
         "summary_prompt": (
             "Fasse auf Deutsch in einem Satz zusammen, welche Entscheidung oder Antwort "
