@@ -162,11 +162,12 @@ h2 { margin: 0; font-size: .74rem; letter-spacing: .09em; text-transform: upperc
     if (d && d.pending) return box("Ihr Reparatur-Status wird gerade vorbereitet.<br>Die Seite lädt sich in einer Minute von selbst neu.");
     if (d && d.error) return box("Der Status konnte gerade nicht geladen werden.<br>Die Seite versucht es gleich nochmal.");
     if (!d) return box("Dieser Status-Link ist unvollständig.<br>Bitte fragen Sie Ihre Werkstatt nach einem neuen Link.");
-    const st = d.s || "neu";
-    const steps = STEPS.filter(([k]) => k !== "teile" || st === "teile" || d.tp);
+    const teileDa = d.s === "teileda";
+    const st = teileDa ? "teile" : d.s || "neu";
+    const steps = STEPS.filter(([k]) => k !== "teile" || st === "teile" || d.tp).map((x) => (teileDa && x[0] === "teile" ? ["teile", "Teile da", "Alle Teile sind da", "Alle Ersatzteile sind angekommen – es geht bald los."] : x));
     let idx = steps.findIndex((x) => x[0] === st); if (idx < 0) idx = 0;
     const done = st === "fertig" || st === "erledigt";
-    const pct = st === "erledigt" ? 1 : (idx + (done ? 1 : 0.5)) / steps.length;
+    const pct = st === "erledigt" ? 1 : (idx + (done ? 1 : teileDa ? 0.85 : 0.5)) / steps.length;
     const C = 2 * Math.PI * 40;
     const cur = steps[idx];
     const ar = Array.isArray(d.ar) ? d.ar : [];
